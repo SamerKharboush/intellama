@@ -1,0 +1,6 @@
+node_modules/
+npm-debug.log
+.DS_Store
+*.tgz
+# Extracted binaries (users get these via postinstall from the tar.gz)
+vendor/llama-cpp-macpro/

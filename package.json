@@ -1,0 +1,52 @@
+{
+  "name": "llama-cli",
+  "version": "1.0.0",
+  "description": "Optimized llama.cpp CLI launcher for Intel Mac (Mac Pro 2013, Ivy Bridge). Interactive TUI for managing local LLM inference with 34 configurable settings.",
+  "main": "bin/llama-cli.js",
+  "bin": {
+    "llama-cli": "bin/llama-cli.js"
+  },
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin/",
+    "scripts/",
+    "src/",
+    "vendor/llama-cpp-macpro.tar.gz"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js",
+    "start": "node bin/llama-cli.js"
+  },
+  "keywords": [
+    "llama",
+    "llama.cpp",
+    "llm",
+    "local-ai",
+    "mac",
+    "intel",
+    "mac-pro",
+    "inference",
+    "gguf",
+    "ai",
+    "cli",
+    "terminal"
+  ],
+  "author": "Samer Kharboush",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/SamerKharboush/llama-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/SamerKharboush/llama-cli/issues"
+  },
+  "homepage": "https://github.com/SamerKharboush/llama-cli#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
