@@ -44,7 +44,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/SamerKharboush/intellama.git"
+    "url": "git+https://github.com/SamerKharboush/intellama.git"
   },
   "bugs": {
     "url": "https://github.com/SamerKharboush/intellama/issues"
