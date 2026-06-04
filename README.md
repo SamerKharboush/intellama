@@ -1,8 +1,8 @@
-# llama-cli
+# intellama
 
-Optimized terminal launcher for local GGUF models on Intel x64 Macs, built around a pinned `llama.cpp` binary package and an interactive `llama-cli` menu.
+Optimized terminal launcher for local GGUF models on Intel x64 Macs, built around a pinned `llama.cpp` binary package and an interactive `intellama` menu (formerly `llama-cli`).
 
-![llama-cli terminal screenshot](assets/llama-cli-screenshot.png)
+![intellama terminal screenshot](assets/llama-cli-screenshot.png)
 
 ## What This Is
 
@@ -13,9 +13,11 @@ The launcher scans `~/models` for `.gguf` files, lets you choose a model by numb
 ## Install With npm
 
 ```bash
-npm install -g llama-cli
-llama-cli
+npm install -g intellama
+intellama
 ```
+
+> Back-compat: the `llama-cli` command is still installed as an alias to `intellama` for this release.
 
 Put models anywhere under:
 
@@ -26,8 +28,8 @@ Put models anywhere under:
 You can override paths:
 
 ```bash
-MODELS_DIR=/Volumes/Models llama-cli
-LLAMA_DIR=/usr/local/llama-cpp llama-cli
+MODELS_DIR=/Volumes/Models intellama
+LLAMA_DIR=/usr/local/llama-cpp intellama
 ```
 
 ## Standalone Archive Install
@@ -53,7 +55,8 @@ cd llama-cpp-macpro
 
 | Tool | Purpose |
 |---|---|
-| `llama-cli` | NPM command that launches the terminal app |
+| `intellama` | NPM command that launches the terminal app |
+| `llama-cli` | Back-compat alias to `intellama` |
 | `llama-launcher.sh` | Interactive zsh launcher |
 | `llama-server` | OpenAI-compatible API server |
 | `llama-bench` | Local benchmark runner |
@@ -148,7 +151,7 @@ This package intentionally ships the stable CPU/Accelerate build. Current practi
 If you want to experiment, keep this CPU build as the stable baseline and create a separate `LLAMA_DIR` build with Metal or Vulkan so the launcher can switch via:
 
 ```bash
-LLAMA_DIR=/path/to/experimental/llama.cpp/build llama-cli
+LLAMA_DIR=/path/to/experimental/llama.cpp/build intellama
 ```
 
 ## Rebuild Release Archives
@@ -177,8 +180,15 @@ npm pack
 Local run without global install:
 
 ```bash
-node bin/llama-cli.js
+node bin/intellama.js
 ```
+
+## Renamed from `llama-cli`
+
+This project was previously published as `llama-cli`. The `llama-cli` npm
+command still works as an alias to `intellama` for backwards compatibility.
+The on-disk launcher (`llama-launcher.sh`) and config dir
+(`~/.config/llama-launcher/`) keep their original names.
 
 ## License
 
