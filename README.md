@@ -1,118 +1,185 @@
 # llama-cli
 
-Optimized [llama.cpp](https://github.com/ggerganov/llama.cpp) CLI launcher for **Intel Mac** — specifically tuned for Mac Pro 2013 (Ivy Bridge, Xeon E5, DDR3).
+Optimized terminal launcher for local GGUF models on Intel x64 Macs, built around a pinned `llama.cpp` binary package and an interactive `llama-cli` menu.
 
-Interactive terminal UI for managing local LLM inference with 34 configurable settings.
+![llama-cli terminal screenshot](assets/llama-cli-screenshot.png)
 
-## Quick Install
+## What This Is
 
-### via npm (recommended)
+`llama-cli` packages an optimized `llama.cpp` build and a zsh terminal launcher for Intel Macs. The default profile is tuned for the 12-core Mac Pro 2013 / Xeon E5 Ivy Bridge class of machines running modern macOS through OCLP.
+
+The launcher scans `~/models` for `.gguf` files, lets you choose a model by number, configures server/runtime settings, starts an OpenAI-compatible local API server, tracks only the server it started, and writes logs under `~/.config/llama-launcher/logs`.
+
+## Install With npm
+
 ```bash
 npm install -g llama-cli
 llama-cli
 ```
 
-### via tar.gz (standalone)
+Put models anywhere under:
+
 ```bash
-# Download the archive from GitHub Releases
-tar xzf llama-cpp-macpro-optimized.tar.gz
+~/models
+```
+
+You can override paths:
+
+```bash
+MODELS_DIR=/Volumes/Models llama-cli
+LLAMA_DIR=/usr/local/llama-cpp llama-cli
+```
+
+## Standalone Archive Install
+
+Download or copy one of the release archives from `releases/`.
+
+```bash
+tar xzf releases/llama-cpp-macpro-optimized.tar.gz
 cd llama-cpp-macpro
-chmod +x install.sh
+./install.sh
+/usr/local/llama-cpp/bin/llama-launcher.sh
+```
+
+ZIP is also available:
+
+```bash
+unzip releases/llama-cpp-macpro-optimized.zip
+cd llama-cpp-macpro
 ./install.sh
 ```
 
-## Requirements
+## Included Tools
 
-- **macOS** (Sequoia, Sonoma, Ventura)
-- **Intel x64** CPU (optimized for Ivy Bridge / Xeon E5)
-- Place `.gguf` model files in `~/models/` (any subfolder)
-
-## What's Included
-
-| Component | Description |
+| Tool | Purpose |
 |---|---|
+| `llama-cli` | NPM command that launches the terminal app |
+| `llama-launcher.sh` | Interactive zsh launcher |
 | `llama-server` | OpenAI-compatible API server |
-| `llama-cli` | Command-line inference |
-| `llama-quantize` | Model quantization tool |
-| `llama-bench` | Benchmarking tool |
-| `llama-launcher` | Interactive TUI (34 settings) |
+| `llama-bench` | Local benchmark runner |
+| `llama-quantize` | Quantization utility |
+| `llama-perplexity` | Perplexity testing utility |
 
-## Build Configuration
+## Build Profile
 
+The bundled `llama.cpp` build is CPU-first and tuned for Ivy Bridge:
+
+```text
+GGML_AVX=ON
+GGML_AVX2=OFF
+GGML_FMA=OFF
+GGML_F16C=ON
+GGML_METAL=OFF
+GGML_BLAS=ON
+GGML_BLAS_VENDOR=Apple
+CFLAGS=-march=ivybridge -mtune=ivybridge
+CXXFLAGS=-march=ivybridge -mtune=ivybridge
 ```
-AVX=ON  AVX2=OFF  FMA=OFF  F16C=ON
-Metal=OFF  BLAS=ON (Apple Accelerate)
--march=ivybridge -mtune=ivybridge
-```
 
-## Usage
+Why CPU-first: on this Mac Pro/OCLP setup, `llama-server` reports no usable GPU for this build, and the tested stable path is Apple Accelerate BLAS on CPU with AVX/F16C and no AVX2/FMA.
+
+## Default Runtime Profile
+
+The launcher defaults are conservative for a 12-core / 64 GB RAM Intel Mac Pro:
+
+| Setting | Default |
+|---|---|
+| Threads | `12` |
+| Context | `8192` |
+| Batch | `2048` |
+| uBatch | `512` |
+| GPU layers | `0` |
+| KV cache | `q4_0/q4_0` |
+| mmap | disabled |
+| mlock | enabled |
+| Fit | `on` |
+| Server | `127.0.0.1:8081` |
+
+Direct server example:
 
 ```bash
-# Launch interactive TUI
-llama-cli
-
-# Direct server start
-llama-server -m ~/models/your-model.gguf \
-  -ngl 0 -t 12 --mlock --no-mmap \
-  -c 8192 -b 2048 \
+llama-server \
+  -m ~/models/model-folder/model.gguf \
+  -ngl 0 -t 12 -tb 12 \
+  --mlock --no-mmap \
+  -c 8192 -b 2048 -ub 512 \
   --cache-type-k q4_0 --cache-type-v q4_0 \
+  --fit on \
   --port 8081 --host 127.0.0.1
-
-# Connect Open WebUI to http://127.0.0.1:8081 (API key: dummy)
 ```
 
-## Optimal Flags for Mac Pro 2013
+OpenAI-compatible endpoint:
 
-| Flag | Value | Reason |
-|---|---|---|
-| `-ngl 0` | CPU-only | D700 GPU Metal compute broken under OCLP |
-| `-t 12` | 12 threads | Physical cores only |
-| `--mlock` | Lock RAM | Prevent swapping (models <25GB) |
-| `--no-mmap` | No mmap | Better for this Xeon |
-| `-c 8192` | Context | Speed vs capability sweet spot |
-| `-b 2048` | Batch | Throughput optimization |
-| `--cache-type-k/v q4_0` | KV cache | Memory savings |
-
-## Performance
-
-| Model | Generation | Prompt |
-|---|---|---|
-| Qwen3.6-27B Q6_K (dense) | ~1.9 tok/s | ~3.2 tok/s |
-
-## Environment Variables
-
-| Variable | Default | Description |
-|---|---|---|
-| `LLAMA_DIR` | auto-detected | Path to llama.cpp binaries |
-| `MODELS_DIR` | `~/models` | Path to .gguf model files |
-
-## Architecture
-
-```
-npm install -g llama-cli
-        │
-        ▼
-  postinstall.js
-        │ extracts vendor/llama-cpp-macpro.tar.gz
-        ▼
-  llama-cli command
-        │ spawns src/llama-launcher.sh
-        ▼
-  Interactive TUI
-        │ user selects model + configures 34 settings
-        ▼
-  llama-server (OpenAI-compatible API on :8081)
+```text
+http://127.0.0.1:8081/v1
 ```
 
-## Standalone Install (tar.gz)
+API key can be any placeholder value, for example `dummy`.
 
-If you prefer not to use npm:
+## Launcher Features
 
-1. Download `llama-cpp-macpro-optimized.tar.gz` from [Releases](https://github.com/SamerKharboush/llama-cli/releases)
-2. Extract: `tar xzf llama-cpp-macpro-optimized.tar.gz`
-3. Run: `cd llama-cpp-macpro && ./install.sh`
-4. Use: `/usr/local/llama-cpp/bin/llama-server -m ~/models/model.gguf ...`
+- Lists every `.gguf` model under `~/models`, including models in separate folders.
+- Saves settings in `~/.config/llama-launcher/settings.conf`.
+- Starts `llama-server` in the background and records its PID.
+- Avoids killing unrelated `llama-server` processes from other apps.
+- Shows health, memory, uptime, and loaded model when available.
+- Offers model eject through the server unload endpoint, with stop fallback.
+- Supports advanced flags including context, batch, threads, KV cache type, RoPE settings, MoE CPU options, prompt cache RAM, cache reuse, custom Jinja chat template, and fit target.
+
+## Performance Notes
+
+Measured on the target Mac Pro profile:
+
+| Model | Generation | Prompt | Output |
+|---|---:|---:|---|
+| Dense 27B Q6_K | about 1.9 tok/s | about 3.2 tok/s | clean |
+| Qwopus3.6 35B A3B Q8_0 | about 8.6 tok/s | about 20.8 tok/s | bad conversion output in testing |
+
+Model quality and GGUF conversion correctness matter. Runtime flags cannot fix corrupted or badly converted weights.
+
+## GPU / Experimental Backends
+
+This package intentionally ships the stable CPU/Accelerate build. Current practical notes:
+
+- `vLLM` is strongest on Linux GPU servers. Its macOS GPU path is aimed at Apple Silicon through vLLM-Metal/MLX, not Intel Mac Pro FirePro GPUs.
+- `llama.cpp` Metal can work on some Intel Mac AMD systems, but this target build and OCLP setup reported no usable GPU during testing.
+- Vulkan/ROCm paths are worth testing on Linux or newer AMD hardware. They are not the default here because the goal is a portable package that works on the matching Intel Mac without extra driver work.
+
+If you want to experiment, keep this CPU build as the stable baseline and create a separate `LLAMA_DIR` build with Metal or Vulkan so the launcher can switch via:
+
+```bash
+LLAMA_DIR=/path/to/experimental/llama.cpp/build llama-cli
+```
+
+## Rebuild Release Archives
+
+From this repo on the optimized Mac:
+
+```bash
+npm run pack:release
+```
+
+This rebuilds:
+
+```text
+vendor/llama-cpp-macpro.tar.gz
+releases/llama-cpp-macpro-optimized.tar.gz
+releases/llama-cpp-macpro-optimized.zip
+```
+
+## Development
+
+```bash
+npm test
+npm pack
+```
+
+Local run without global install:
+
+```bash
+node bin/llama-cli.js
+```
 
 ## License
 
-MIT
+MIT. The bundled `llama.cpp` binaries are built from `llama.cpp`; see the upstream project license for its components.

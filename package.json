@@ -1,7 +1,7 @@
 {
   "name": "llama-cli",
-  "version": "1.0.0",
-  "description": "Optimized llama.cpp CLI launcher for Intel Mac (Mac Pro 2013, Ivy Bridge). Interactive TUI for managing local LLM inference with 34 configurable settings.",
+  "version": "1.1.0",
+  "description": "Optimized llama.cpp terminal launcher for Intel x64 Macs, tuned for Mac Pro 2013 Ivy Bridge with Apple Accelerate BLAS.",
   "main": "bin/llama-cli.js",
   "bin": {
     "llama-cli": "bin/llama-cli.js"
@@ -13,14 +13,17 @@
     "x64"
   ],
   "files": [
+    "assets/",
     "bin/",
     "scripts/",
     "src/",
     "vendor/llama-cpp-macpro.tar.gz"
   ],
   "scripts": {
+    "pack:release": "zsh scripts/package-release.sh",
     "postinstall": "node scripts/postinstall.js",
-    "start": "node bin/llama-cli.js"
+    "start": "node bin/llama-cli.js",
+    "test": "zsh -n src/llama-launcher.sh && node --check bin/llama-cli.js && node --check scripts/postinstall.js"
   },
   "keywords": [
     "llama",

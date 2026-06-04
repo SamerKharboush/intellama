@@ -12,6 +12,29 @@ const fs = require('fs');
 const PACKAGE_DIR = path.resolve(__dirname, '..');
 const LAUNCHER_PATH = path.join(PACKAGE_DIR, 'src', 'llama-launcher.sh');
 const VENDOR_DIR = path.join(PACKAGE_DIR, 'vendor', 'llama-cpp-macpro');
+const pkg = require(path.join(PACKAGE_DIR, 'package.json'));
+
+if (process.argv.includes('--version') || process.argv.includes('-v')) {
+  console.log(pkg.version);
+  process.exit(0);
+}
+
+if (process.argv.includes('--help') || process.argv.includes('-h')) {
+  console.log(`llama-cli ${pkg.version}
+
+Usage:
+  llama-cli
+  MODELS_DIR=/path/to/models llama-cli
+  LLAMA_DIR=/path/to/llama-cpp-build-or-package llama-cli
+
+Models:
+  Put .gguf files under ~/models by default.
+
+Server:
+  The launcher starts llama-server at http://127.0.0.1:8081/v1 by default.
+`);
+  process.exit(0);
+}
 
 // Verify installation
 if (!fs.existsSync(LAUNCHER_PATH)) {
@@ -25,6 +48,9 @@ if (!fs.existsSync(VENDOR_DIR)) {
   console.error('\x1b[31mError: vendor binaries not found.\x1b[0m');
   console.error('The postinstall script may not have run. Try:');
   console.error('  cd ' + PACKAGE_DIR + ' && node scripts/postinstall.js');
+  console.error('');
+  console.error('For development with an external llama.cpp build:');
+  console.error('  LLAMA_DIR=/Users/macpro/llama.cpp/build llama-cli');
   process.exit(1);
 }
 

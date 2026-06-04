@@ -54,7 +54,7 @@ S_moe_cpu_layers="0"
 S_disable_kv_offload="off"
 S_override_tensor=""
 S_prompt_cache="0"
-S_cache_reuse="off"
+S_cache_reuse="0"
 S_full_swa_cache="off"
 S_keep_first_n="0"
 S_auto_start="off"
@@ -90,7 +90,7 @@ banner() {
     clear
     echo -e "${C}"
     echo '  ╔═══════════════════════════════════════════════════════╗'
-    echo '  ║         llama-cli v1.0.0                             ║'
+    echo '  ║         llama-cli v1.1.0                             ║'
     echo '  ║         Optimized llama.cpp for Intel Mac             ║'
     echo '  ╚═══════════════════════════════════════════════════════╝'
     echo -e "${RST}"
@@ -224,11 +224,12 @@ configure_settings() {
         printf "  ${G}27${RST}) Fit (auto-adjust memory)  ${C}%-10s${RST}\n" "$(get_setting fit)"
         printf "  ${G}28${RST}) Fit Target per Device     ${C}%-10s${RST} ${D}(MiB, 0=auto)${RST}\n" "$(get_setting fit_target)"
         printf "  ${G}29${RST}) Prompt Cache RAM          ${C}%-10s${RST} ${D}(MiB)${RST}\n" "$(get_setting prompt_cache)"
-        printf "  ${G}30${RST}) Cache Reuse               ${C}%-10s${RST}\n" "$(get_setting cache_reuse)"
-        printf "  ${G}31${RST}) Full SWA Cache            ${C}%-10s${RST}\n" "$(get_setting full_swa_cache)"
-        printf "  ${G}32${RST}) Keep First N Tokens       ${C}%-10s${RST}\n" "$(get_setting keep_first_n)"
+        printf "  ${G}30${RST}) Cache Reuse               ${C}%-10s${RST} ${D}(0=off, token chunk size)${RST}\n" "$(get_setting cache_reuse)"
+        printf "  ${G}31${RST}) Full SWA Cache            ${C}%-10s${RST} ${D}(stored only; unsupported by this build)${RST}\n" "$(get_setting full_swa_cache)"
+        printf "  ${G}32${RST}) Keep First N Tokens       ${C}%-10s${RST} ${D}(stored only; unsupported by this build)${RST}\n" "$(get_setting keep_first_n)"
         printf "  ${G}33${RST}) Server Port               ${C}%-10s${RST}\n" "$(get_setting port)"
         printf "  ${G}34${RST}) Server Host               ${C}%-10s${RST}\n" "$(get_setting host)"
+        printf "  ${G}35${RST}) Auto Start Server         ${C}%-10s${RST}\n" "$(get_setting auto_start)"
         echo ""
         echo -e "  ${Y} s${RST}) Save & Return"
         echo -e "  ${Y} r${RST}) Reset to Defaults"
@@ -267,11 +268,12 @@ configure_settings() {
             27) toggle "fit" ;;
             28) echo -n "Fit Target MiB [$(get_setting fit_target)]: "; read v; [[ -n "$v" ]] && set_setting fit_target "$v" ;;
             29) echo -n "Prompt Cache MiB [$(get_setting prompt_cache)]: "; read v; [[ -n "$v" ]] && set_setting prompt_cache "$v" ;;
-            30) toggle "cache_reuse" ;;
+            30) echo -n "Cache Reuse token chunk size, 0=off [$(get_setting cache_reuse)]: "; read v; [[ -n "$v" ]] && set_setting cache_reuse "$v" ;;
             31) toggle "full_swa_cache" ;;
             32) echo -n "Keep First N [$(get_setting keep_first_n)]: "; read v; [[ -n "$v" ]] && set_setting keep_first_n "$v" ;;
             33) echo -n "Port [$(get_setting port)]: "; read v; [[ -n "$v" ]] && set_setting port "$v" ;;
             34) echo -n "Host [$(get_setting host)]: "; read v; [[ -n "$v" ]] && set_setting host "$v" ;;
+            35) toggle "auto_start" ;;
             s|S) save_config; return ;;
             r|R) reset_defaults ;;
         esac
@@ -288,7 +290,7 @@ reset_defaults() {
     S_cont_batching="on"; S_ctx_shift="on"; S_host="127.0.0.1"
     S_port="8081"; S_jinja="off"; S_jinja_template=""
     S_keep_moe_cpu="off"; S_moe_cpu_layers="0"; S_disable_kv_offload="off"
-    S_override_tensor=""; S_prompt_cache="0"; S_cache_reuse="off"
+    S_override_tensor=""; S_prompt_cache="0"; S_cache_reuse="0"
     S_full_swa_cache="off"; S_keep_first_n="0"; S_auto_start="off"
     S_default_model=""; S_fit="on"; S_fit_target="0"
     echo -e "  ${G}Settings reset${RST}"
@@ -330,6 +332,11 @@ build_command() {
     [[ "$(get_setting rope_scale)" != "1.0" ]] && cmd+=" --rope-scale $(get_setting rope_scale)"
     [[ "$(get_setting rope_freq_base)" != "0.0" ]] && cmd+=" --rope-freq-base $(get_setting rope_freq_base)"
     [[ "$(get_setting rope_freq_scale)" != "0.0" ]] && cmd+=" --rope-freq-scale $(get_setting rope_freq_scale)"
+    [[ "$(get_setting fit_target)" != "0" ]] && cmd+=" --fit-target $(get_setting fit_target)"
+    [[ "$(get_setting prompt_cache)" != "0" ]] && cmd+=" --cache-ram $(get_setting prompt_cache)"
+    [[ "$(get_setting cache_reuse)" != "0" ]] && cmd+=" --cache-reuse $(get_setting cache_reuse)"
+    # full_swa_cache and keep_first_n are retained in config for compatibility
+    # with frontends that expose them, but this pinned llama-server does not.
 
     echo "$cmd"
 }
@@ -461,6 +468,16 @@ view_log() {
 main() {
     mkdir -p "$CONFIG_DIR" "$LOG_DIR"
     load_config
+    if [[ ! -x "$SERVER_BIN" ]]; then
+        echo -e "${R}llama-server not found or not executable:${RST} $SERVER_BIN"
+        echo "Set LLAMA_DIR to a directory that contains bin/llama-server."
+        exit 1
+    fi
+    [[ -n "$(get_setting default_model)" && -f "$(get_setting default_model)" ]] && SELECTED_MODEL="$(get_setting default_model)"
+    if [[ "$(get_setting auto_start)" == "on" && -n "$SELECTED_MODEL" && ! is_our_server_running ]]; then
+        start_server "$SELECTED_MODEL"
+        sleep 1
+    fi
 
     while true; do
         banner
@@ -469,7 +486,7 @@ main() {
         echo -e "${W}Actions:${RST}"
         echo -e "${D}────────────────────────────────────────────────${RST}"
         echo -e "  ${G}1${RST}) Select Model"
-        echo -e "  ${G}2${RST}) Configure Settings (34 options)"
+        echo -e "  ${G}2${RST}) Configure Settings (35 options)"
         echo -e "  ${G}3${RST}) Start Server"
         echo -e "  ${G}4${RST}) Stop Server"
         echo -e "  ${G}5${RST}) Eject Model (unload without stopping)"

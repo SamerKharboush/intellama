@@ -13,11 +13,12 @@ const VENDOR_DIR = path.join(PACKAGE_DIR, 'vendor');
 const TARBALL = path.join(VENDOR_DIR, 'llama-cpp-macpro.tar.gz');
 const EXTRACT_DIR = path.join(VENDOR_DIR, 'llama-cpp-macpro');
 const CONFIG_DIR = path.join(process.env.HOME, '.config', 'llama-launcher');
+const SERVER_BIN = path.join(EXTRACT_DIR, 'bin', 'llama-server');
 
 console.log('\x1b[36m[llama-cli]\x1b[0m Setting up llama.cpp binaries...');
 
 // Check if already extracted
-if (fs.existsSync(path.join(EXTRACT_DIR, 'bin', 'llama-server'))) {
+if (fs.existsSync(SERVER_BIN)) {
   console.log('\x1b[32m[llama-cli]\x1b[0m Binaries already extracted. Skipping.');
   process.exit(0);
 }
@@ -33,6 +34,10 @@ try {
   // Extract tarball
   console.log('\x1b[36m[llama-cli]\x1b[0m Extracting binaries...');
   execSync(`tar xzf "${TARBALL}" -C "${VENDOR_DIR}"`, { stdio: 'pipe' });
+
+  if (!fs.existsSync(SERVER_BIN)) {
+    throw new Error(`Extraction completed, but llama-server was not found at ${SERVER_BIN}`);
+  }
 
   // Set executable permissions
   const binDir = path.join(EXTRACT_DIR, 'bin');
@@ -57,6 +62,7 @@ try {
   console.log('');
   console.log('  Run \x1b[33mllama-cli\x1b[0m to launch the interactive TUI.');
   console.log('  Place .gguf models in \x1b[33m~/models/\x1b[0m');
+  console.log('  Local API default: \x1b[33mhttp://127.0.0.1:8081/v1\x1b[0m');
   console.log('');
 
 } catch (err) {
