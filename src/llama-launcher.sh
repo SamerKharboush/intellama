@@ -83,6 +83,13 @@ S_spec_type="off"
 S_spec_draft_model=""
 S_spec_n_max="16"
 S_spec_n_min="0"
+S_spec_ngram_simple_size_n="12"
+S_spec_ngram_simple_size_m="48"
+S_spec_ngram_simple_min_hits="1"
+S_spec_ngram_mod_n_min="48"
+S_spec_ngram_mod_n_max="64"
+S_spec_ngram_mod_n_match="24"
+S_cache_ram_mib="0"
 
 ALL_KEYS=(n_gpu_layers ctx_size batch_size ubatch_size threads threads_batch
   n_predict parallel_seqs repeat_last_n rope_scaling rope_scale rope_freq_base
@@ -90,7 +97,10 @@ ALL_KEYS=(n_gpu_layers ctx_size batch_size ubatch_size threads threads_batch
   cont_batching ctx_shift host port jinja jinja_template keep_moe_cpu
   moe_cpu_layers disable_kv_offload override_tensor prompt_cache cache_reuse
   full_swa_cache keep_first_n auto_start default_model fit fit_target
-  spec_type spec_draft_model spec_n_max spec_n_min)
+  spec_type spec_draft_model spec_n_max spec_n_min
+  spec_ngram_simple_size_n spec_ngram_simple_size_m spec_ngram_simple_min_hits
+  spec_ngram_mod_n_min spec_ngram_mod_n_max spec_ngram_mod_n_match
+  cache_ram_mib)
 
 # ─── Helpers ───────────────────────────────────────────────────
 get_setting() { eval "echo \$S_$1"; }
@@ -315,6 +325,13 @@ configure_settings() {
         printf "  ${G}37${RST}) Spec Draft Model          ${C}%-20s${RST}\n" "$(get_setting spec_draft_model)"
         printf "  ${G}38${RST}) Spec Draft N Max         ${C}%-10s${RST}\n" "$(get_setting spec_n_max)"
         printf "  ${G}39${RST}) Spec Draft N Min         ${C}%-10s${RST}\n" "$(get_setting spec_n_min)"
+        printf "  ${G}40${RST}) ngram-simple size N       ${C}%-10s${RST} ${D}(spec_ngram_simple_size_n)${RST}\n" "$(get_setting spec_ngram_simple_size_n)"
+        printf "  ${G}41${RST}) ngram-simple size M       ${C}%-10s${RST} ${D}(spec_ngram_simple_size_m)${RST}\n" "$(get_setting spec_ngram_simple_size_m)"
+        printf "  ${G}42${RST}) ngram-simple min-hits     ${C}%-10s${RST} ${D}(spec_ngram_simple_min_hits)${RST}\n" "$(get_setting spec_ngram_simple_min_hits)"
+        printf "  ${G}43${RST}) ngram-mod n-min           ${C}%-10s${RST} ${D}(spec_ngram_mod_n_min)${RST}\n" "$(get_setting spec_ngram_mod_n_min)"
+        printf "  ${G}44${RST}) ngram-mod n-max           ${C}%-10s${RST} ${D}(spec_ngram_mod_n_max)${RST}\n" "$(get_setting spec_ngram_mod_n_max)"
+        printf "  ${G}45${RST}) ngram-mod n-match         ${C}%-10s${RST} ${D}(spec_ngram_mod_n_match)${RST}\n" "$(get_setting spec_ngram_mod_n_match)"
+        printf "  ${G}46${RST}) Cache RAM cap (MiB)       ${C}%-10s${RST} ${D}(cache_ram_mib; 0=off)${RST}\n" "$(get_setting cache_ram_mib)"
         echo ""
         echo -e "  ${Y} s${RST}) Save & Return"
         echo -e "  ${Y} r${RST}) Reset to Defaults"
@@ -363,6 +380,13 @@ configure_settings() {
             37) echo -n "Spec Draft Model Path [$(get_setting spec_draft_model)]: "; read v; set_setting spec_draft_model "$v" ;;
             38) echo -n "Spec Draft N Max [$(get_setting spec_n_max)]: "; read v; [[ -n "$v" ]] && set_setting spec_n_max "$v" ;;
             39) echo -n "Spec Draft N Min [$(get_setting spec_n_min)]: "; read v; [[ -n "$v" ]] && set_setting spec_n_min "$v" ;;
+            40) echo -n "ngram-simple size N [$(get_setting spec_ngram_simple_size_n)]: "; read v; [[ -n "$v" ]] && set_setting spec_ngram_simple_size_n "$v" ;;
+            41) echo -n "ngram-simple size M [$(get_setting spec_ngram_simple_size_m)]: "; read v; [[ -n "$v" ]] && set_setting spec_ngram_simple_size_m "$v" ;;
+            42) echo -n "ngram-simple min-hits [$(get_setting spec_ngram_simple_min_hits)]: "; read v; [[ -n "$v" ]] && set_setting spec_ngram_simple_min_hits "$v" ;;
+            43) echo -n "ngram-mod n-min [$(get_setting spec_ngram_mod_n_min)]: "; read v; [[ -n "$v" ]] && set_setting spec_ngram_mod_n_min "$v" ;;
+            44) echo -n "ngram-mod n-max [$(get_setting spec_ngram_mod_n_max)]: "; read v; [[ -n "$v" ]] && set_setting spec_ngram_mod_n_max "$v" ;;
+            45) echo -n "ngram-mod n-match [$(get_setting spec_ngram_mod_n_match)]: "; read v; [[ -n "$v" ]] && set_setting spec_ngram_mod_n_match "$v" ;;
+            46) echo -n "Cache RAM cap MiB, 0=off [$(get_setting cache_ram_mib)]: "; read v; [[ -n "$v" ]] && set_setting cache_ram_mib "$v" ;;
             s|S) save_config; return ;;
             r|R) reset_defaults ;;
         esac
@@ -383,6 +407,10 @@ reset_defaults() {
     S_full_swa_cache="off"; S_keep_first_n="0"; S_auto_start="off"
     S_default_model=""; S_fit="on"; S_fit_target="0"
     S_spec_type="off"; S_spec_draft_model=""; S_spec_n_max="16"; S_spec_n_min="0"
+    S_spec_ngram_simple_size_n="12"; S_spec_ngram_simple_size_m="48"
+    S_spec_ngram_simple_min_hits="1"; S_spec_ngram_mod_n_min="48"
+    S_spec_ngram_mod_n_max="64"; S_spec_ngram_mod_n_match="24"
+    S_cache_ram_mib="0"
     echo -e "  ${G}Settings reset${RST}"
     sleep 1
 }
@@ -426,6 +454,20 @@ build_command() {
         cmd+=" --spec-draft-n-max $(get_setting spec_n_max)"
         [[ "$(get_setting spec_n_min)" -gt 0 ]] && cmd+=" --spec-draft-n-min $(get_setting spec_n_min)"
     fi
+
+    # n-gram tuning flags (only meaningful with spec_type=ngram-*)
+    case "$(get_setting spec_type)" in
+        ngram-simple)
+            cmd+=" --spec-ngram-simple-size-n $(get_setting spec_ngram_simple_size_n)"
+            cmd+=" --spec-ngram-simple-size-m $(get_setting spec_ngram_simple_size_m)"
+            cmd+=" --spec-ngram-simple-min-hits $(get_setting spec_ngram_simple_min_hits)"
+            ;;
+        ngram-mod)
+            cmd+=" --spec-ngram-mod-n-min $(get_setting spec_ngram_mod_n_min)"
+            cmd+=" --spec-ngram-mod-n-max $(get_setting spec_ngram_mod_n_max)"
+            cmd+=" --spec-ngram-mod-n-match $(get_setting spec_ngram_mod_n_match)"
+            ;;
+    esac
 
     [[ -n "$(get_setting jinja_template)" ]] && cmd+=" --chat-template '$(get_setting jinja_template)'"
     [[ -n "$(get_setting override_tensor)" ]] && cmd+=" --override-tensor '$(get_setting override_tensor)'"
@@ -583,6 +625,11 @@ main() {
     [[ "$S_threads" == "0" && $HW_PHYSICAL_CORES -gt 0 ]] && S_threads=$HW_PHYSICAL_CORES
     [[ "$S_threads_batch" == "0" && $HW_PHYSICAL_CORES -gt 0 ]] && S_threads_batch=$HW_PHYSICAL_CORES
     [[ $HW_IS_IVYBRIDGE -eq 1 && "$S_spec_n_max" -gt 16 ]] && S_spec_n_max="16"
+    # Ivy Bridge + DDR3: n-gram self-speculation is a small net win.
+    # Auto-enable for first-time users so they hit the documented baseline.
+    if [[ $HW_IS_IVYBRIDGE -eq 1 && "$S_spec_type" == "off" ]]; then
+        S_spec_type="ngram-simple"
+    fi
     if [[ ! -x "$SERVER_BIN" ]]; then
         echo -e "${R}llama-server not found or not executable:${RST} $SERVER_BIN"
         echo "Set LLAMA_DIR to a directory that contains bin/llama-server."
