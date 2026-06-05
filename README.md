@@ -2,6 +2,15 @@
 
 Optimized terminal launcher for local GGUF models on Intel x64 Macs, built around a pinned `llama.cpp` binary package and an interactive `intellama` menu (formerly `llama-cli`).
 
+> **v1.2.1 — Bugfixes + Ivy Bridge perf track + GPU probe**
+> - Banner reads version from `package.json` (no more stale "v1.1.0").
+> - Settings menu count derives from `ALL_KEYS` (no more stale "35 options").
+> - Model select works for any index (root cause: `setopt KSH_ARRAYS` removed).
+> - `set_setting()` validates numeric and `spec_type` inputs; `load_config()` resets invalid entries to defaults with a warning. The crash on `cache_reuse=off` is fixed.
+> - `build_command()` gates `--cache-reuse`, `--cache-ram`, `--fit-target` to integer regex.
+> - New settings: `spec_ngram_simple_{size_n,size_m,min_hits}`, `spec_ngram_mod_{n_min,n_max,n_match}`, `cache_ram_mib`. Ivy Bridge: `spec_type` defaults to `ngram-simple` on first run.
+> - New menu option `g` — "Probe GPU Compute" — runs a tiny model with `-ngl 99` against the optional Metal companion build (`releases/llama-cpp-macpro-metal.tar.gz`) and reports whether GPU compute is functional under your current OCLP nightly.
+
 ![intellama terminal screenshot](assets/llama-cli-screenshot.png)
 
 ## What This Is
@@ -100,6 +109,12 @@ ceiling is memory bandwidth. Mitigations baked into the launcher:
   of reading extra weights. On Ivy Bridge the launcher caps
   `--spec-draft-n-max` at 16 — beyond that the extra draft reads cost
   more DDR3 bandwidth than they save.
+- **N-gram tuning knobs (v1.2.1)** — settings 40–46 expose
+  `--spec-ngram-simple-size-n/m/min-hits` and
+  `--spec-ngram-mod-n-min/n-max/n-match`, plus a `--cache-ram` MiB cap
+  for the prompt cache (default 0 = unlimited up to server's 8 GiB).
+  On Ivy Bridge the launcher now auto-selects `ngram-simple` for new
+  installs so first-time users hit the documented baseline.
 - **MTP draft models** — `draft-mtp` requires a clean MTP-capable GGUF
   (some community MTP conversions are corrupted and will produce
   garbage). Leave `spec_type` on `off` unless you have a known-good MTP
@@ -184,6 +199,14 @@ If you want to experiment, keep this CPU build as the stable baseline and create
 LLAMA_DIR=/path/to/experimental/llama.cpp/build intellama
 ```
 
+**Probe the GPU (v1.2.1):** the launcher ships an opt-in companion
+`releases/llama-cpp-macpro-metal.tar.gz` (Metal-enabled, otherwise
+identical to the default AVX build). The `g` menu option probes this
+companion binary with `-ngl 99` and reports whether the D700s compute
+path is functional under your current OCLP nightly. Read-only with
+respect to the running server and your saved config — safe to run at
+any time.
+
 ## Rebuild Release Archives
 
 From this repo on the optimized Mac:
@@ -199,6 +222,14 @@ vendor/llama-cpp-macpro.tar.gz
 releases/llama-cpp-macpro-optimized.tar.gz
 releases/llama-cpp-macpro-optimized.zip
 ```
+
+To additionally build the Metal companion archive for the GPU probe:
+
+```bash
+npm run pack:release -- --with-metal
+```
+
+…which adds `releases/llama-cpp-macpro-metal.tar.gz`.
 
 ## Development
 
