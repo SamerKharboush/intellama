@@ -11,6 +11,36 @@ VENDOR_TARBALL="$ROOT_DIR/vendor/llama-cpp-macpro.tar.gz"
 RELEASE_TARBALL="$ROOT_DIR/releases/llama-cpp-macpro-optimized.tar.gz"
 RELEASE_ZIP="$ROOT_DIR/releases/llama-cpp-macpro-optimized.zip"
 
+REBUILD=1
+for arg in "$@"; do
+  case "$arg" in
+    --no-build) REBUILD=0 ;;
+    --rebuild)  REBUILD=1 ;;
+  esac
+done
+
+build_llama_cpp() {
+  local src="$LLAMA_CPP_DIR"
+  local build="$src/build"
+  echo "Building llama.cpp in $build (Ivy Bridge, AVX-only)..."
+  cmake -S "$src" -B "$build" \
+    -DGGML_AVX=ON \
+    -DGGML_AVX2=OFF \
+    -DGGML_FMA=OFF \
+    -DGGML_F16C=ON \
+    -DGGML_METAL=OFF \
+    -DGGML_BLAS=ON \
+    -DGGML_BLAS_VENDOR=Apple \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_FLAGS="-march=ivybridge -mtune=ivybridge" \
+    -DCMAKE_CXX_FLAGS="-march=ivybridge -mtune=ivybridge"
+  cmake --build "$build" --config Release -j "$(sysctl -n hw.physicalcpu)"
+}
+
+if [[ $REBUILD -eq 1 ]]; then
+  build_llama_cpp
+fi
+
 required_bins=(llama-server llama-cli llama-bench llama-quantize llama-perplexity)
 
 for bin in "${required_bins[@]}"; do
