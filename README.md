@@ -77,9 +77,39 @@ GGML_BLAS=ON
 GGML_BLAS_VENDOR=Apple
 CFLAGS=-march=ivybridge -mtune=ivybridge
 CXXFLAGS=-march=ivybridge -mtune=ivybridge
+CMAKE_BUILD_TYPE=Release
 ```
 
 Why CPU-first: on this Mac Pro/OCLP setup, `llama-server` reports no usable GPU for this build, and the tested stable path is Apple Accelerate BLAS on CPU with AVX/F16C and no AVX2/FMA.
+
+## Performance
+
+The launcher auto-detects CPU cores, RAM, and instruction-set features
+(`AVX`, `AVX2`, `FMA`, `F16C`) on launch via `sysctl`. Thread count defaults
+to the number of physical cores. The “Show Hardware” menu option prints
+the probe results so you can verify what the launcher saw.
+
+On Ivy Bridge (DDR3-1866 quad-channel, ~60 GB/s ceiling) the inference
+ceiling is memory bandwidth. Mitigations baked into the launcher:
+
+- **MoE-friendly defaults** — `-ngl 0`, `-t <physical cores>`,
+  `--mlock --no-mmap`, quantized KV cache.
+- **Self-speculative decoding** — settings 36–39 let you opt into
+  `ngram-simple` / `ngram-mod` / `ngram-cache` / `draft-mtp`. The n-gram
+  modes reuse the active model and look up recent token windows instead
+  of reading extra weights. On Ivy Bridge the launcher caps
+  `--spec-draft-n-max` at 16 — beyond that the extra draft reads cost
+  more DDR3 bandwidth than they save.
+- **MTP draft models** — `draft-mtp` requires a clean MTP-capable GGUF
+  (some community MTP conversions are corrupted and will produce
+  garbage). Leave `spec_type` on `off` unless you have a known-good MTP
+  file.
+
+Pick a single model that fits comfortably in RAM, keep the launcher
+defaults, and you should match or slightly exceed the baseline Q8_0
+throughput. The 35B-A3B MoE at Q8_0 is the sweet spot: ~8.7 tok/s
+baseline; `ngram-simple` should land at or just above that on Ivy
+Bridge.
 
 ## Default Runtime Profile
 
