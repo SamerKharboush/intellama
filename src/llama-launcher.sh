@@ -161,6 +161,87 @@ show_hardware() {
     echo -e "  Ivy Bridge:    ${C}$HW_IS_IVYBRIDGE${RST}"
 }
 
+probe_gpu_compute() {
+    banner
+    echo -e "${W}GPU Compute Probe${RST}"
+    echo -e "${D}────────────────────────────────────────────────${RST}"
+    echo "This launches a tiny model with -ngl 99 for ~10 seconds and"
+    echo "checks whether the server produces any tokens. It is read-only"
+    echo "with respect to your saved settings and never touches the"
+    echo "running server. Uses the Metal-enabled companion build if"
+    echo "present, otherwise falls back to the default AVX build."
+    echo ""
+
+    local probe_model=""
+    local draft="$HOME/models/draft/Qwen3-0.6B-Q8_0.gguf"
+    if [[ -f "$draft" ]]; then
+        probe_model="$draft"
+    else
+        scan_models
+        if [[ ${#MODELS_LIST[@]} -gt 0 ]]; then
+            probe_model="${MODELS_LIST[1]}"
+        fi
+    fi
+
+    if [[ -z "$probe_model" || ! -f "$probe_model" ]]; then
+        echo -e "${R}No model found for probe.${RST}"
+        echo "Drop a small GGUF (e.g. Qwen3-0.6B-Q8_0) in ~/models/draft/."
+        return 1
+    fi
+
+    local probe_bin="$LLAMA_DIR/bin/llama-server"
+    if [[ -x "$LLAMA_DIR/bin/llama-server" && "$LLAMA_DIR" == *metal* ]]; then
+        :  # already a metal dir
+    fi
+    if [[ -x "$PACKAGE_DIR/../releases/llama-cpp-macpro-metal/bin/llama-server" ]]; then
+        probe_bin="$PACKAGE_DIR/../releases/llama-cpp-macpro-metal/bin/llama-server"
+    fi
+    local probe_label="AVX build"
+    [[ "$probe_bin" == *metal* ]] && probe_label="Metal build"
+
+    echo -e "${C}Probing with:${RST} $probe_label"
+    echo -e "${C}Binary:${RST}     $probe_bin"
+    echo -e "${C}Model:${RST}      $probe_model"
+    echo ""
+
+    local out
+    # macOS lacks the `timeout` coreutil — use backgrounded process + kill instead.
+    out=$(
+        {
+            "$probe_bin" \
+                -m "$probe_model" \
+                -ngl 99 -t "$HW_PHYSICAL_CORES" --mlock --no-mmap \
+                -c 512 -b 128 -ub 32 \
+                --port 18081 --host 127.0.0.1 \
+                -n 4 2>&1 &
+            local probe_pid=$!
+            sleep 12
+            kill -TERM "$probe_pid" 2>/dev/null
+            wait "$probe_pid" 2>/dev/null
+        } | head -60
+    )
+
+    echo "$out"
+    echo ""
+    if echo "$out" | grep -qiE "illegal instruction|no usable gpu|metal.*error|cuda.*error|ggml-metal.*failed|invalid device|backend.*init.*failed"; then
+        if echo "$out" | grep -qiE "illegal instruction|metal.*error|cuda.*error|ggml-metal.*failed|invalid device|backend.*init.*failed"; then
+            echo -e "${R}GPU compute NOT available — server died with hardware/driver error.${RST}"
+            echo "Stick with the AVX CPU build. The D700s are unusable for inference on this OCLP setup."
+        else
+            echo -e "${Y}GPU compute not available in this build (no GPU support compiled in).${RST}"
+            echo "Re-run package-release.sh --with-metal to build a Metal-enabled binary and try again."
+        fi
+    elif echo "$out" | grep -qiE "llm_load_tensors:.*failed|model not found|error while handling|unknown model architecture"; then
+        echo -e "${Y}Probe inconclusive — server errored, but not necessarily a GPU problem.${RST}"
+        echo "Check the log lines above for the actual failure."
+    elif echo "$out" | grep -qE "main:.*loaded|server is listening|model loaded|llama_model_loader"; then
+        echo -e "${G}GPU compute appears to be working — model loaded, no error.${RST}"
+        echo "Try -ngl > 0 on your real model. Test with a small prompt first."
+    else
+        echo -e "${Y}Probe inconclusive. Inspect the output above.${RST}"
+    fi
+}
+
 is_our_server_running() {
     [[ -f "$PID_FILE" ]] || return 1
     local pid=$(cat "$PID_FILE")
@@ -656,6 +737,7 @@ main() {
         echo -e "  ${G}7${RST}) Purge Memory"
         echo -e "  ${G}8${RST}) Benchmark Current Model"
         echo -e "  ${G}h${RST}) Show Hardware"
+        echo -e "  ${G}g${RST}) Probe GPU Compute"
         echo ""
         echo -e "  ${R}q${RST}) Quit"
         echo ""
@@ -690,6 +772,7 @@ main() {
                 fi
                 ;;
             h|H) show_hardware; echo ""; echo -n "Press Enter..."; read _ ;;
+            g|G) probe_gpu_compute; echo ""; echo -n "Press Enter..."; read _ ;;
             q|Q) stop_server 2>/dev/null; echo -e "${G}Goodbye!${RST}"; exit 0 ;;
         esac
     done
