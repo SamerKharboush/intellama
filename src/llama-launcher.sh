@@ -90,6 +90,8 @@ S_spec_ngram_mod_n_min="48"
 S_spec_ngram_mod_n_max="64"
 S_spec_ngram_mod_n_match="24"
 S_cache_ram_mib="0"
+S_gpu_probe_env="MTL_DEBUG_LAYER,MTL_SHADER_VALIDATION,GGML_METAL_DEVICE"
+S_gpu_probe_port="18081"
 
 ALL_KEYS=(n_gpu_layers ctx_size batch_size ubatch_size threads threads_batch
   n_predict parallel_seqs repeat_last_n rope_scaling rope_scale rope_freq_base
@@ -100,7 +102,8 @@ ALL_KEYS=(n_gpu_layers ctx_size batch_size ubatch_size threads threads_batch
   spec_type spec_draft_model spec_n_max spec_n_min
   spec_ngram_simple_size_n spec_ngram_simple_size_m spec_ngram_simple_min_hits
   spec_ngram_mod_n_min spec_ngram_mod_n_max spec_ngram_mod_n_match
-  cache_ram_mib)
+  cache_ram_mib
+  gpu_probe_env gpu_probe_port)
 
 # ─── Helpers ───────────────────────────────────────────────────
 get_setting() { eval "echo \$S_$1"; }
@@ -114,7 +117,7 @@ set_setting() {
                 *) print -r -- "[intellama] invalid spec_type: $value (allowed: off|ngram-simple|ngram-mod|ngram-cache|draft-mtp)"; return 1 ;;
             esac
             ;;
-        n_gpu_layers|threads|threads_batch|batch_size|ubatch_size|ctx_size|n_predict|parallel_seqs|repeat_last_n|moe_cpu_layers|fit_target|prompt_cache|cache_reuse|keep_first_n|port|spec_n_max|spec_n_min|spec_ngram_simple_size_n|spec_ngram_simple_size_m|spec_ngram_simple_min_hits|spec_ngram_mod_n_min|spec_ngram_mod_n_max|spec_ngram_mod_n_match|cache_ram_mib)
+        n_gpu_layers|threads|threads_batch|batch_size|ubatch_size|ctx_size|n_predict|parallel_seqs|repeat_last_n|moe_cpu_layers|fit_target|prompt_cache|cache_reuse|keep_first_n|port|spec_n_max|spec_n_min|spec_ngram_simple_size_n|spec_ngram_simple_size_m|spec_ngram_simple_min_hits|spec_ngram_mod_n_min|spec_ngram_mod_n_max|spec_ngram_mod_n_match|cache_ram_mib|gpu_probe_port)
             if ! [[ "$value" =~ ^-?[0-9]+$ ]]; then
                 print -r -- "[intellama] invalid $key (not an integer): $value"; return 1
             fi
@@ -199,20 +202,47 @@ probe_gpu_compute() {
     local probe_label="AVX build"
     [[ "$probe_bin" == *metal* ]] && probe_label="Metal build"
 
+    # Build env-var passthrough: any var listed in gpu_probe_env that is
+    # already set in the user's shell is exported into the probe process.
+    # Unset vars are silently skipped — user controls what they want to test.
+    local probe_env_str=$(get_setting gpu_probe_env)
+    local probe_env_args=()
+    if [[ -n "$probe_env_str" ]]; then
+        local IFS=','
+        local -a wanted=($probe_env_str)
+        local IFS=$' \t\n'
+        for v in "${wanted[@]}"; do
+            v="${v// /}"
+            [[ -z "$v" ]] && continue
+            if [[ -n "${(P)v}" ]]; then
+                probe_env_args+=("$v=${(P)v}")
+            fi
+        done
+    fi
+
+    local probe_port=$(get_setting gpu_probe_port)
+    [[ "$probe_port" =~ ^[0-9]+$ ]] || probe_port=18081
+
     echo -e "${C}Probing with:${RST} $probe_label"
     echo -e "${C}Binary:${RST}     $probe_bin"
     echo -e "${C}Model:${RST}      $probe_model"
+    echo -e "${C}Port:${RST}       ${probe_port} (configurable via gpu_probe_port)"
+    if [[ ${#probe_env_args[@]} -gt 0 ]]; then
+        echo -e "${C}Env vars:${RST}   ${probe_env_args[*]}"
+    else
+        echo -e "${C}Env vars:${RST}   (none set in shell — exporting nothing)"
+    fi
     echo ""
 
     local out
     # macOS lacks the `timeout` coreutil — use backgrounded process + kill instead.
     out=$(
         {
-            "$probe_bin" \
+            env "${probe_env_args[@]}" "$probe_bin" \
                 -m "$probe_model" \
                 -ngl 99 -t "$HW_PHYSICAL_CORES" --mlock --no-mmap \
                 -c 512 -b 128 -ub 32 \
-                --port 18081 --host 127.0.0.1 \
+                --port "$probe_port" --host 127.0.0.1 \
                 -n 4 2>&1 &
             local probe_pid=$!
             sleep 12
@@ -398,6 +428,39 @@ select_model() {
     SELECTED_MODEL="${MODELS_LIST[$((choice - 1))]}"
     set_setting default_model "$SELECTED_MODEL"
     echo -e "\n${G}Selected:${RST} $(basename "$SELECTED_MODEL")"
+
+    # If a server (ours or foreign) is already serving on the port, the
+    # selection we just made is a label until something restarts the server.
+    # Detect that state and offer a one-keystroke swap.
+    if is_our_server_running; then
+        local current_model=""
+        local resp=$(curl -s "http://$(get_setting host):$(get_setting port)/v1/models" 2>/dev/null)
+        if [[ -n "$resp" ]]; then
+            current_model=$(echo "$resp" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['data'][0]['id'])" 2>/dev/null)
+        fi
+
+        # Same path the new selection points at? Nothing to do.
+        if [[ "$current_model" == "$(basename "$SELECTED_MODEL")" ]]; then
+            echo -e "${D}Server is already serving this model.${RST}"
+            return 0
+        fi
+
+        local fp=$(get_foreign_pid)
+        if [[ -n "$fp" ]]; then
+            echo -e "${Y}A llama-server (PID $fp) is running on the configured port but intellama did not start it.${RST}"
+            echo -e "${Y}Loading the new model will stop that server (with confirmation).${RST}"
+        fi
+
+        echo -n "Stop the current server and start '$(basename "$SELECTED_MODEL")'? [y/N]: "
+        read -r yn
+        if [[ "$yn" == "y" || "$yn" == "Y" ]]; then
+            stop_server
+            sleep 1
+            start_server "$SELECTED_MODEL"
+        else
+            echo -e "${D}Selection saved. Use option 3 (Start Server) to load it.${RST}"
+        fi
+    fi
     return 0
 }
 
@@ -460,6 +523,8 @@ configure_settings() {
         printf "  ${G}44${RST}) ngram-mod n-max           ${C}%-10s${RST} ${D}(spec_ngram_mod_n_max)${RST}\n" "$(get_setting spec_ngram_mod_n_max)"
         printf "  ${G}45${RST}) ngram-mod n-match         ${C}%-10s${RST} ${D}(spec_ngram_mod_n_match)${RST}\n" "$(get_setting spec_ngram_mod_n_match)"
         printf "  ${G}46${RST}) Cache RAM cap (MiB)       ${C}%-10s${RST} ${D}(cache_ram_mib; 0=off)${RST}\n" "$(get_setting cache_ram_mib)"
+        printf "  ${G}47${RST}) GPU probe env vars         ${C}%-10s${RST} ${D}(gpu_probe_env; comma-separated)${RST}\n" "$(get_setting gpu_probe_env)"
+        printf "  ${G}48${RST}) GPU probe port             ${C}%-10s${RST} ${D}(gpu_probe_port; default 18081)${RST}\n" "$(get_setting gpu_probe_port)"
         echo ""
         echo -e "  ${Y} s${RST}) Save & Return"
         echo -e "  ${Y} r${RST}) Reset to Defaults"
@@ -515,6 +580,8 @@ configure_settings() {
             44) echo -n "ngram-mod n-max [$(get_setting spec_ngram_mod_n_max)]: "; read v; [[ -n "$v" ]] && set_setting spec_ngram_mod_n_max "$v" ;;
             45) echo -n "ngram-mod n-match [$(get_setting spec_ngram_mod_n_match)]: "; read v; [[ -n "$v" ]] && set_setting spec_ngram_mod_n_match "$v" ;;
             46) echo -n "Cache RAM cap MiB, 0=off [$(get_setting cache_ram_mib)]: "; read v; [[ -n "$v" ]] && set_setting cache_ram_mib "$v" ;;
+            47) echo -n "GPU probe env vars [$(get_setting gpu_probe_env)]: "; read v; [[ -n "$v" ]] && set_setting gpu_probe_env "$v" ;;
+            48) echo -n "GPU probe port [$(get_setting gpu_probe_port)]: "; read v; [[ -n "$v" ]] && set_setting gpu_probe_port "$v" ;;
             s|S) save_config; return ;;
             r|R) reset_defaults ;;
         esac

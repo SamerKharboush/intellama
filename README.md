@@ -2,6 +2,11 @@
 
 Optimized terminal launcher for local GGUF models on Intel x64 Macs, built around a pinned `llama.cpp` binary package and an interactive `intellama` menu (formerly `llama-cli`).
 
+> **v1.2.3 — Select actually loads + GPU probe env vars**
+> - `select_model` now detects a running server (ours or foreign) and asks "Stop the current server and start '<new>'? [y/N]". Same-model picks skip the prompt.
+> - New `gpu_probe_env` setting (default `MTL_DEBUG_LAYER,MTL_SHADER_VALIDATION,GGML_METAL_DEVICE`) — the `g` menu probe exports any listed var that is set in your shell, so you can test Metal/Vulkan env knobs without code changes.
+> - New `gpu_probe_port` setting (default 18081) so the probe never collides with a real server on 8081.
+
 > **v1.2.2 — Server discovery + unload endpoint**
 > - `eject` / `stop` / `purge` now detect a `llama-server` already on the port (even if intellama didn't start it) and report honestly instead of printing "done" while the foreign server keeps running.
 > - `eject` calls `POST /models/unload` (llama.cpp master) with a fallback to legacy `POST /unload`. No more silent 404 false-positive.
