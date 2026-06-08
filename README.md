@@ -255,6 +255,9 @@ Local run without global install:
 node bin/intellama.js
 ```
 
+- MLC-LLM toolchain: see [`docs/gpu-mlc-setup.md`](docs/gpu-mlc-setup.md)
+  and run `scripts/setup-mlc.sh` to install.
+
 ## Renamed from `llama-cli`
 
 This project was previously published as `llama-cli`. The `llama-cli` npm
