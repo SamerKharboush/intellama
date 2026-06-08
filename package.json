@@ -24,7 +24,7 @@
     "pack:release": "zsh scripts/package-release.sh",
     "postinstall": "node scripts/postinstall.js",
     "start": "node bin/llama-cli.js",
-    "test": "zsh -n src/llama-launcher.sh && node --check bin/intellama.js && node --check bin/llama-cli.js && node --check scripts/postinstall.js"
+    "test": "zsh -n src/llama-launcher.sh && zsh -n scripts/setup-mlc.sh && node --check bin/intellama.js && node --check bin/llama-cli.js && node --check scripts/postinstall.js"
   },
   "keywords": [
     "llama",
