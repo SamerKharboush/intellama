@@ -34,17 +34,34 @@ if [[ "$(uname -m)" != "x86_64" ]]; then
     exit 1
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-    echo "${RED}intellama setup-mlc: python3 not found. Install via 'brew install python@3.12'.${RESET}" >&2
-    exit 1
+# MLC nightly wheels require Python 3.10–3.12 (3.13+ and 3.9 are unsupported as of 2026-06).
+# Prefer python3.12 explicitly; fall back to python3.11, then python3.10.
+MLC_PYTHON=""
+for py in python3.12 python3.11 python3.10; do
+    if command -v "$py" >/dev/null 2>&1; then
+        MLC_PYTHON="$py"
+        break
+    fi
+done
+if [[ -z "$MLC_PYTHON" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+        MLC_PYTHON="python3"
+    else
+        echo "${RED}intellama setup-mlc: python3 not found. Install via 'brew install python@3.12'.${RESET}" >&2
+        exit 1
+    fi
 fi
 
-PY_VERSION="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
+PY_VERSION="$("$MLC_PYTHON" -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
 PY_MAJOR="${PY_VERSION%.*}"
 PY_MINOR="${PY_VERSION#*.}"
-if [[ "$PY_MAJOR" -lt 3 ]] || { [[ "$PY_MAJOR" -eq 3 ]] && [[ "$PY_MINOR" -lt 9 ]]; }; then
-    echo "${RED}intellama setup-mlc: python3 >= 3.9 required (got: $PY_VERSION). Install via 'brew install python@3.12'.${RESET}" >&2
+if [[ "$PY_MAJOR" -lt 3 ]] || { [[ "$PY_MAJOR" -eq 3 ]] && [[ "$PY_MINOR" -lt 10 ]]; }; then
+    echo "${RED}intellama setup-mlc: python3 >= 3.10 required (got: $PY_VERSION from $MLC_PYTHON). Install via 'brew install python@3.12'.${RESET}" >&2
     exit 1
+fi
+if [[ "$PY_MAJOR" -gt 3 ]] || { [[ "$PY_MAJOR" -eq 3 ]] && [[ "$PY_MINOR" -gt 12 ]]; }; then
+    echo "${YELLOW}intellama setup-mlc: warning — Python $PY_VERSION may not have MLC nightly wheels (supported: 3.10–3.12).${RESET}" >&2
+    echo "${YELLOW}If pip install fails, install Python 3.12: 'brew install python@3.12' and re-run.${RESET}" >&2
 fi
 
 if ! command -v brew >/dev/null 2>&1; then
@@ -97,26 +114,31 @@ if [[ -x "$VENV_DIR/bin/python" ]]; then
     echo "venv: upgrading pip"
     "$VENV_DIR/bin/pip" install --upgrade pip --quiet
 else
-    echo "venv: creating at $VENV_DIR"
-    python3 -m venv "$VENV_DIR"
+    echo "venv: creating at $VENV_DIR (using $MLC_PYTHON)"
+    "$MLC_PYTHON" -m venv "$VENV_DIR"
 fi
 
 if ! "$VENV_DIR/bin/python" -c "import mlc_llm, tvm" >/dev/null 2>&1; then
-    echo "pip: installing mlc-ai-nightly and mlc-llm-nightly from https://mlc.ai/wheels"
-    "$VENV_DIR/bin/pip" install --pre -U mlc-ai-nightly mlc-llm-nightly -f https://mlc.ai/wheels
+    echo "pip: installing mlc-ai-nightly-cpu and mlc-llm-nightly-cpu from https://mlc.ai/wheels"
+    "$VENV_DIR/bin/pip" install --pre -U mlc-ai-nightly-cpu mlc-llm-nightly-cpu -f https://mlc.ai/wheels
     PIP_EXIT=$?
     if [[ $PIP_EXIT -ne 0 ]]; then
         echo "${RED}intellama setup-mlc: pip install failed — see output above.${RESET}" >&2
         echo "${RED}The nightly index is at https://mlc.ai/wheels; check for upstream build breakages.${RESET}" >&2
         exit 1
     fi
+
+    # MLC nightly wheels pull NumPy 2.x but torch 2.2.2 is built for NumPy 1.x.
+    # Pin NumPy to the last compatible line before import verification.
+    "$VENV_DIR/bin/pip" install "numpy<2" --quiet
+
     if ! "$VENV_DIR/bin/python" -c "import mlc_llm, tvm" >/dev/null 2>&1; then
         echo "${RED}intellama setup-mlc: pip install completed but import still fails.${RESET}" >&2
         echo "${RED}The nightly index may be broken. See docs/gpu-mlc-setup.md#troubleshooting.${RESET}" >&2
         exit 1
     fi
 else
-    echo "pip: mlc-ai-nightly and mlc-llm-nightly already installed, skipping"
+    echo "pip: mlc-ai-nightly-cpu and mlc-llm-nightly-cpu already installed, skipping"
 fi
 
 # ─── Step 3 — GPU verification (strict gate) ────────────────────
