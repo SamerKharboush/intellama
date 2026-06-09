@@ -1,95 +1,80 @@
 # intellama
 
-Optimized terminal launcher for local GGUF models on Intel x64 Macs, built around a pinned `llama.cpp` binary package and an interactive `intellama` menu (formerly `llama-cli`).
+Optimized local LLM launcher for Intel x64 Macs. `intellama` wraps a tuned `llama.cpp` server, scans your GGUF models, manages runtime settings, and exposes a stable OpenAI-compatible local API.
 
-> **v1.3.0-alpha — MLC-LLM Phase 0 prerequisites**
-> - New `scripts/setup-mlc.sh` brings the box to MLC-ready state in one command.
-> - New `docs/gpu-mlc-setup.md` covers install + troubleshooting.
-> - `npm test` gains a `zsh -n scripts/setup-mlc.sh` gate.
-> - Note: current x86_64 macOS MLC nightly wheels import-fail in `tvm_ffi` on Python 3.12; Vulkan detection succeeds on both D700s.
-
-> **v1.2.3 — Select actually loads + GPU probe env vars**
-> - `select_model` now detects a running server (ours or foreign) and asks "Stop the current server and start '<new>'? [y/N]". Same-model picks skip the prompt.
-> - New `gpu_probe_env` setting (default `MTL_DEBUG_LAYER,MTL_SHADER_VALIDATION,GGML_METAL_DEVICE`) — the `g` menu probe exports any listed var that is set in your shell, so you can test Metal/Vulkan env knobs without code changes.
-> - New `gpu_probe_port` setting (default 18081) so the probe never collides with a real server on 8081.
-
-> **v1.2.2 — Server discovery + unload endpoint**
-> - `eject` / `stop` / `purge` now detect a `llama-server` already on the port (even if intellama didn't start it) and report honestly instead of printing "done" while the foreign server keeps running.
-> - `eject` calls `POST /models/unload` (llama.cpp master) with a fallback to legacy `POST /unload`. No more silent 404 false-positive.
-> - `stop` on a foreign server asks for confirmation before killing the PID (`lsof -ti :port` discovery).
-> - `server_status` annotates foreign-server ownership with a clear note.
-
-> **v1.2.1 — Bugfixes + Ivy Bridge perf track + GPU probe**
-> - Banner reads version from `package.json` (no more stale "v1.1.0").
-> - Settings menu count derives from `ALL_KEYS` (no more stale "35 options").
-> - Model select works for any index (root cause: `setopt KSH_ARRAYS` removed).
-> - `set_setting()` validates numeric and `spec_type` inputs; `load_config()` resets invalid entries to defaults with a warning. The crash on `cache_reuse=off` is fixed.
-> - `build_command()` gates `--cache-reuse`, `--cache-ram`, `--fit-target` to integer regex.
-> - New settings: `spec_ngram_simple_{size_n,size_m,min_hits}`, `spec_ngram_mod_{n_min,n_max,n_match}`, `cache_ram_mib`. Ivy Bridge: `spec_type` defaults to `ngram-simple` on first run.
-> - New menu option `g` — "Probe GPU Compute" — runs a tiny model with `-ngl 99` against the optional Metal companion build (`releases/llama-cpp-macpro-metal.tar.gz`) and reports whether GPU compute is functional under your current OCLP nightly.
+**Latest published version:** `1.3.0-alpha`  
+**Target machine profile:** 2013 Mac Pro, Xeon E5 Ivy Bridge, 64 GB RAM, Apple Accelerate BLAS, OpenCore Legacy Patcher.
 
 ![intellama terminal screenshot](assets/llama-cli-screenshot.png)
 
-## What This Is
+## What it does
 
-`llama-cli` packages an optimized `llama.cpp` build and a zsh terminal launcher for Intel Macs. The default profile is tuned for the 12-core Mac Pro 2013 / Xeon E5 Ivy Bridge class of machines running modern macOS through OCLP.
+`intellama` starts a local `llama-server` instance from a selected `.gguf` model and gives you a terminal menu for day-to-day operations:
 
-The launcher scans `~/models` for `.gguf` files, lets you choose a model by number, configures server/runtime settings, starts an OpenAI-compatible local API server, tracks only the server it started, and writes logs under `~/.config/llama-launcher/logs`.
+- scan `~/models` for `.gguf` files
+- choose a model interactively
+- tune context, batch size, threads, KV cache, RoPE, MoE, prompt cache, and fit settings
+- start, stop, eject, purge, benchmark, and inspect the running server
+- expose an OpenAI-compatible endpoint at `http://127.0.0.1:8081/v1`
 
-## Install With npm
+The launcher is intentionally conservative: it ships a CPU-first build that is stable on the target hardware and avoids pretending GPU acceleration works when the local backend cannot be verified.
+
+## Install
 
 ```bash
 npm install -g intellama
 intellama
 ```
 
-> Back-compat: the `llama-cli` command is still installed as an alias to `intellama` for this release.
+The `llama-cli` command remains available as a backwards-compatible alias.
 
-Put models anywhere under:
+Place models anywhere under:
 
 ```bash
 ~/models
 ```
 
-You can override paths:
+You can override the model and backend locations:
 
 ```bash
 MODELS_DIR=/Volumes/Models intellama
 LLAMA_DIR=/usr/local/llama-cpp intellama
 ```
 
-## Standalone Archive Install
+## Quick start
 
-Download or copy one of the release archives from `releases/`.
+1. Put one or more `.gguf` files under `~/models`
+2. Run:
 
-```bash
-tar xzf releases/llama-cpp-macpro-optimized.tar.gz
-cd llama-cpp-macpro
-./install.sh
-/usr/local/llama-cpp/bin/llama-launcher.sh
-```
+   ```bash
+   intellama
+   ```
 
-ZIP is also available:
+3. Select a model
+4. Start the server
+5. Call the local API:
 
-```bash
-unzip releases/llama-cpp-macpro-optimized.zip
-cd llama-cpp-macpro
-./install.sh
-```
+   ```bash
+   curl http://127.0.0.1:8081/v1/chat/completions \
+     -H "Content-Type: application/json" \
+     -d '{"messages":[{"role":"user","content":"Say hello."}],"max_tokens":20}'
+   ```
 
-## Included Tools
+Use any placeholder API key, for example `dummy`.
+
+## Included tools
 
 | Tool | Purpose |
 |---|---|
-| `intellama` | NPM command that launches the terminal app |
-| `llama-cli` | Back-compat alias to `intellama` |
-| `llama-launcher.sh` | Interactive zsh launcher |
-| `llama-server` | OpenAI-compatible API server |
-| `llama-bench` | Local benchmark runner |
-| `llama-quantize` | Quantization utility |
-| `llama-perplexity` | Perplexity testing utility |
+| `intellama` | main terminal launcher |
+| `llama-cli` | backwards-compatible alias |
+| `llama-launcher.sh` | interactive zsh launcher |
+| `llama-server` | OpenAI-compatible local API server |
+| `llama-bench` | benchmark runner |
+| `llama-quantize` | quantization utility |
+| `llama-perplexity` | perplexity testing utility |
 
-## Build Profile
+## Build profile
 
 The bundled `llama.cpp` build is CPU-first and tuned for Ivy Bridge:
 
@@ -106,46 +91,24 @@ CXXFLAGS=-march=ivybridge -mtune=ivybridge
 CMAKE_BUILD_TYPE=Release
 ```
 
-Why CPU-first: on this Mac Pro/OCLP setup, `llama-server` reports no usable GPU for this build, and the tested stable path is Apple Accelerate BLAS on CPU with AVX/F16C and no AVX2/FMA.
+Why CPU-first: this target machine has D700 GPUs, but the stable tested path is Apple Accelerate BLAS on CPU with AVX/F16C and no AVX2/FMA. The launcher keeps that path as the default so it remains predictable on the intended hardware.
 
 ## Performance
 
-The launcher auto-detects CPU cores, RAM, and instruction-set features
-(`AVX`, `AVX2`, `FMA`, `F16C`) on launch via `sysctl`. Thread count defaults
-to the number of physical cores. The “Show Hardware” menu option prints
-the probe results so you can verify what the launcher saw.
+The launcher auto-detects CPU cores, RAM, and instruction-set features (`AVX`, `AVX2`, `FMA`, `F16C`) on launch via `sysctl`. Thread count defaults to the number of physical cores, and the `Show Hardware` menu option prints the probe results.
 
-On Ivy Bridge (DDR3-1866 quad-channel, ~60 GB/s ceiling) the inference
-ceiling is memory bandwidth. Mitigations baked into the launcher:
+On Ivy Bridge, memory bandwidth is usually the ceiling. The launcher bakes in several mitigations:
 
-- **MoE-friendly defaults** — `-ngl 0`, `-t <physical cores>`,
-  `--mlock --no-mmap`, quantized KV cache.
-- **Self-speculative decoding** — settings 36–39 let you opt into
-  `ngram-simple` / `ngram-mod` / `ngram-cache` / `draft-mtp`. The n-gram
-  modes reuse the active model and look up recent token windows instead
-  of reading extra weights. On Ivy Bridge the launcher caps
-  `--spec-draft-n-max` at 16 — beyond that the extra draft reads cost
-  more DDR3 bandwidth than they save.
-- **N-gram tuning knobs (v1.2.1)** — settings 40–46 expose
-  `--spec-ngram-simple-size-n/m/min-hits` and
-  `--spec-ngram-mod-n-min/n-max/n-match`, plus a `--cache-ram` MiB cap
-  for the prompt cache (default 0 = unlimited up to server's 8 GiB).
-  On Ivy Bridge the launcher now auto-selects `ngram-simple` for new
-  installs so first-time users hit the documented baseline.
-- **MTP draft models** — `draft-mtp` requires a clean MTP-capable GGUF
-  (some community MTP conversions are corrupted and will produce
-  garbage). Leave `spec_type` on `off` unless you have a known-good MTP
-  file.
+- MoE-friendly defaults
+- `mlock` / `no-mmap`
+- conservative context and batch defaults
+- optional self-speculative decoding modes
+- prompt cache sizing knobs
+- explicit GPU-offload controls when you provide a different backend build
 
-Pick a single model that fits comfortably in RAM, keep the launcher
-defaults, and you should match or slightly exceed the baseline Q8_0
-throughput. The 35B-A3B MoE at Q8_0 is the sweet spot: ~8.7 tok/s
-baseline; `ngram-simple` should land at or just above that on Ivy
-Bridge.
+The 35B-A3B MoE at Q8_0 is the sweet spot on this profile: roughly 8–9 tok/s on CPU in the tested configuration.
 
-## Default Runtime Profile
-
-The launcher defaults are conservative for a 12-core / 64 GB RAM Intel Mac Pro:
+## Default runtime profile
 
 | Setting | Default |
 |---|---|
@@ -173,25 +136,17 @@ llama-server \
   --port 8081 --host 127.0.0.1
 ```
 
-OpenAI-compatible endpoint:
+## Launcher features
 
-```text
-http://127.0.0.1:8081/v1
-```
+- Lists every `.gguf` model under `~/models`, including nested folders
+- Saves settings in `~/.config/llama-launcher/settings.conf`
+- Starts `llama-server` in the background and records its PID
+- Avoids killing unrelated `llama-server` processes from other apps
+- Shows health, memory, uptime, and loaded model when available
+- Offers model eject through the server unload endpoint, with stop fallback
+- Supports advanced flags for context, batch, threads, KV cache type, RoPE settings, MoE CPU options, prompt cache RAM, cache reuse, custom Jinja chat template, and fit target
 
-API key can be any placeholder value, for example `dummy`.
-
-## Launcher Features
-
-- Lists every `.gguf` model under `~/models`, including models in separate folders.
-- Saves settings in `~/.config/llama-launcher/settings.conf`.
-- Starts `llama-server` in the background and records its PID.
-- Avoids killing unrelated `llama-server` processes from other apps.
-- Shows health, memory, uptime, and loaded model when available.
-- Offers model eject through the server unload endpoint, with stop fallback.
-- Supports advanced flags including context, batch, threads, KV cache type, RoPE settings, MoE CPU options, prompt cache RAM, cache reuse, custom Jinja chat template, and fit target.
-
-## Performance Notes
+## Performance notes
 
 Measured on the target Mac Pro profile:
 
@@ -202,7 +157,7 @@ Measured on the target Mac Pro profile:
 
 Model quality and GGUF conversion correctness matter. Runtime flags cannot fix corrupted or badly converted weights.
 
-## GPU / Experimental Backends
+## GPU / experimental backends
 
 This package intentionally ships the stable CPU/Accelerate build. Current practical notes:
 
@@ -224,7 +179,23 @@ path is functional under your current OCLP nightly. Read-only with
 respect to the running server and your saved config — safe to run at
 any time.
 
-## Rebuild Release Archives
+## MLC-LLM toolchain
+
+`v1.3.0-alpha` adds the Phase 0 setup script for MLC-LLM:
+
+- `scripts/setup-mlc.sh`
+- `docs/gpu-mlc-setup.md`
+- `scripts/setup-mlc.brewfile`
+
+The script installs the Vulkan/MoltenVK toolchain, creates a project venv, installs the MLC nightly wheels, and verifies that Vulkan sees the D700 GPUs.
+
+```bash
+zsh scripts/setup-mlc.sh
+```
+
+Current status: Vulkan detection succeeds on both D700 GPUs, but the current x86_64 macOS MLC nightly wheels fail to import cleanly on Python 3.12 due to an upstream `tvm_ffi` issue. The setup script records that failure and leaves the CPU build as the stable path.
+
+## Rebuild release archives
 
 From this repo on the optimized Mac:
 
@@ -260,9 +231,6 @@ Local run without global install:
 ```bash
 node bin/intellama.js
 ```
-
-- MLC-LLM toolchain: see [`docs/gpu-mlc-setup.md`](docs/gpu-mlc-setup.md)
-  and run `scripts/setup-mlc.sh` to install.
 
 ## Renamed from `llama-cli`
 
